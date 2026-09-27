@@ -11,10 +11,10 @@ Die Lagrange-Relaxation holt die Zuordnungsbedingung („jeder Kunde genau einma
 ```
 standortplanung-demo (UFL, Wurzel: starke Kopplung, Schranke fast exakt)                 [gebaut]
   ├─ kapazitierte-standortplanung-demo (Kapazität + Single-Sourcing, Lagrange)           [dieses Stück]
-  ├─ p-Center (Minimax + Überdeckung)                                                    [geplant]
-  ├─ p-Hub-Median                                                                        [geplant]
-  ├─ Wettbewerbsstandort                                                                 [geplant]
-  └─ Standort + Bestand (Risk Pooling)                                                   [geplant]
+  ├─ p-center-demo (Maximum statt Summe: Farthest-first, exakt per Überdeckung)          [gebaut]
+  ├─ standort-bestand-demo (Bestandskosten je Lager, Risk Pooling)                       [gebaut]
+  ├─ wettbewerbsstandort-demo (Führer und Folger, (r|p)-Centroid)                        [gebaut]
+  └─ p-hub-median-demo (Hub-Standorte mit Rabatt, Single Allocation)                     [gebaut]
 ```
 
 ## Ergebnis (Zahlen aus den Tests)

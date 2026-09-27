@@ -357,7 +357,7 @@ st.markdown(
 | **Erzeugte Netze** | Gleichverteilte Standorte und Kunden, Kosten linear in Entfernung und Nachfrage, keine Fremddaten; die Lehrnetze sind Konstruktionen. |
 """
 )
-st.caption("Die Standortplanungs-Linie ist als Ganzes geplant: das Standortproblem ohne Kapazität als Wurzel, dieses Stück mit Kapazität und Lagrange-Relaxation, danach p-Center, Hub-Standorte, Wettbewerbsstandort und Standort mit Bestand.")
+st.caption("Die Standortplanungs-Linie ist damit vollständig: das Standortproblem ohne Kapazität als Wurzel, dieses Stück mit Kapazität und Lagrange-Relaxation, p-Center, Standort mit Bestand, Wettbewerbsstandort und Hub-Standorte.")
 
 st.markdown("---")
 
