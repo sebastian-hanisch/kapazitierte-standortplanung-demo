@@ -74,3 +74,7 @@ Die Einheit „Rucksack-Lösungen“ ist eine Zählung, keine Uhr; sie gewichtet
 | `tests/` | 301 Tests (+ 6 übersprungene Zufallsnetze ohne Lösung): Szenario, Lagrange (Rucksack, Schranke von Hand, schwache Dualität, Integralität), Heuristik, Exakt, Presets, Zahlen (`test_claims.py`), App |
 
 Lokal starten: `pip install -r requirements.txt`, dann `streamlit run app.py`; Tests: `pip install -r requirements-dev.txt`, dann `python -m pytest tests`.
+
+---
+
+Diese Demo ist Teil des Portfolios von [Sebastian Hanisch](https://sebastianhanisch.net) – Operations Research und Machine Learning ([Über mich](https://sebastianhanisch.net/ueber-mich.html)). Mehr zur Reihe: [Standortplanung: von der Wahl zum Wettbewerb](https://sebastianhanisch.net/konzepte-standortplanung.html).
