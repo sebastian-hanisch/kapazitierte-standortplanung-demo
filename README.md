@@ -71,7 +71,7 @@ Die Einheit „Rucksack-Lösungen“ ist eine Zählung, keine Uhr; sie gewichtet
 | `cfl_exact.py` | HiGHS: Optimum mit und ohne Teilung, LP, beste Zuordnung bei fester Auswahl, Brute Force für Kleinstnetze |
 | `cfl_evaluation.py`, `cfl_visualization.py` | Vergleiche, Reihen, Verteilungen; Karte, Kostenmatrix, Konvergenz, Balken |
 | `cfl_presets.py`, `cfl_constants.py` | Presets, Permalink, Regler-Grenzen, feste Seeds |
-| `tests/` | 309 Tests (+ 6 übersprungene Zufallsnetze ohne Lösung): Szenario, Lagrange (Rucksack, Schranke von Hand, schwache Dualität, Integralität), Heuristik, Exakt, Presets, Zahlen (`test_claims.py`), App |
+| `tests/` | 314 Tests (davon 6 übersprungen: Zufallsnetze ohne Lösung): Szenario, Lagrange (Rucksack, Schranke von Hand, schwache Dualität, Integralität), Heuristik, Exakt (mit Zeitlimit-Zweig), Presets, Zahlen (`test_claims.py`), App |
 
 Lokal starten: `pip install -r requirements.txt`, dann `streamlit run app.py`; Tests: `pip install -r requirements-dev.txt`, dann `python -m pytest tests`.
 

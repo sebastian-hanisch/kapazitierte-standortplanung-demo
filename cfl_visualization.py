@@ -74,7 +74,7 @@ def build_matrix(inst, open_set=(), assign=None, height=None):
     return _base(fig, height or max(220, 60 + 42 * inst.m))
 
 
-def build_convergence(run, opt=None, lp=None, current=None, height=420):
+def build_convergence(run, opt=None, lp=None, current=None, height=420, opt_label="Optimum"):
     """Schranke L(u_k), beste Schranke und obere Schranke der Heuristik über die Iterationen; Linien für das Optimum und die LP."""
     ks = [it.k for it in run.iters]
     fig = go.Figure()
@@ -86,7 +86,7 @@ def build_convergence(run, opt=None, lp=None, current=None, height=420):
     if lp is not None:
         fig.add_hline(y=lp, line=dict(color=C.COLORS["lp"], dash="dash"), annotation_text="LP", annotation_position="bottom right")
     if opt is not None:
-        fig.add_hline(y=opt, line=dict(color=C.COLORS["opt"], dash="dash"), annotation_text="Optimum", annotation_position="top right")
+        fig.add_hline(y=opt, line=dict(color=C.COLORS["opt"], dash="dash"), annotation_text=opt_label, annotation_position="top right")
     if current is not None and 0 <= current < len(run.iters):
         it = run.iters[current]
         fig.add_trace(go.Scatter(x=[it.k], y=[it.bound], mode="markers", marker=dict(color=C.COLORS["open"], size=13, symbol="diamond"), name="aktuelle Iteration"))
@@ -101,26 +101,27 @@ def build_convergence(run, opt=None, lp=None, current=None, height=420):
     return _base(fig, height)
 
 
-def build_bounds(rows, height=340):
-    """Schranken und Lösungen in Prozent des Single-Source-Optimums (Linie bei 100)."""
+def build_bounds(rows, height=340, proven=True):
+    """Schranken und Lösungen in Prozent der Single-Source-Bezugskosten (Linie bei 100): Optimum, ohne Beweis die beste gefundene Lösung."""
+    bezug, kurz = ("Prozent des Optimums (100 = Optimum)", "des Optimums") if proven else ("Prozent der besten gefundenen Lösung (100), nicht bewiesen", "der besten gefundenen Lösung")
     colors = {"untere Schranke": C.COLORS["lagrange"], "Optimum": C.COLORS["opt"], "Lösung": C.COLORS["heur"]}
     labels = [r[0] for r in rows][::-1]
     vals = [r[2] for r in rows][::-1]
     cols = [colors[r[3]] for r in rows][::-1]
     fig = go.Figure(go.Bar(y=labels, x=vals, orientation="h", marker=dict(color=cols), text=[f"{v:.1f} %".replace(".", ",") for v in vals], textposition="outside", cliponaxis=False,
-                           hovertemplate="%{y}: %{x:.2f} % des Optimums<extra></extra>"))
-    fig.update_xaxes(range=[max(0, min(vals) - 8), max(vals) + 6], title="Prozent des Optimums (100 = Optimum)")
+                           hovertemplate="%{y}: %{x:.2f} % " + kurz + "<extra></extra>"))
+    fig.update_xaxes(range=[max(0, min(vals) - 8), max(vals) + 6], title=bezug)
     fig.add_vline(x=100, line=dict(color=C.COLORS["opt"], dash="dash"))
     return _base(fig, height)
 
 
-def build_rules(runs, opt=None, height=340):
+def build_rules(runs, opt=None, height=340, opt_label="Optimum"):
     """Beste Schranke je Schrittweitenregel über die Iterationen."""
     fig = go.Figure()
     for rule, (run, _best) in runs.items():
         fig.add_trace(go.Scatter(x=[it.k for it in run.iters], y=[it.best for it in run.iters], mode="lines", name=C.LABELS[rule], line=dict(color=C.COLORS[rule], width=2)))
     if opt is not None:
-        fig.add_hline(y=opt, line=dict(color=C.COLORS["opt"], dash="dash"), annotation_text="Optimum", annotation_position="top right")
+        fig.add_hline(y=opt, line=dict(color=C.COLORS["opt"], dash="dash"), annotation_text=opt_label, annotation_position="top right")
         fig.update_yaxes(range=[0.8 * opt, 1.02 * opt])
     fig.update_xaxes(title="Iteration")
     fig.update_yaxes(title="beste Schranke")

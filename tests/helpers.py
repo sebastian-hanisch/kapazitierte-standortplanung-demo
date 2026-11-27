@@ -1,6 +1,7 @@
 """Gemeinsame Hilfen der Tests: kleine Zufallsnetze für Brute-Force-Vergleiche."""
 
 import cfl_scenario as sc
+import cfl_exact as ex
 
 
 def tiny(seed, m=3, n=4):
@@ -11,3 +12,21 @@ def tiny(seed, m=3, n=4):
     f = tuple(3 + r.below(10) for _ in range(m))
     c = tuple(tuple(1 + r.below(9) for _ in range(n)) for _ in range(m))
     return sc.CFL("teaching", tuple(f"S{i + 1}" for i in range(m)), tuple(f"K{j + 1}" for j in range(n)), (), (), demand, cap, f, c)
+
+
+def zeitlimit(monkeypatch, mit_loesung):
+    """Ersetzt den Löser durch einen, der das Zeitlimit meldet (Status 1), mit oder ohne gefundene Lösung."""
+    real = ex.milp
+
+    class Fake:
+        pass
+
+    def fake(*args, **kwargs):
+        r = real(*args, **kwargs)
+        f = Fake()
+        f.status = 1
+        f.x, f.fun = (r.x, r.fun) if mit_loesung else (None, None)
+        f.mip_dual_bound = 1.0 if r.fun is None else r.fun - 1
+        return f
+
+    monkeypatch.setattr(ex, "milp", fake)

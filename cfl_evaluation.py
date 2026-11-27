@@ -64,18 +64,31 @@ def analyse(p):
     return dict(inst=inst, single=single, split=split, lp=lp, y=y, run=run, primal=best, runs=runs)
 
 
+def split_row(split):
+    """Zeile der teilbaren Zuordnung (Name, Wert) oder None. Ohne Beweis ist nur die Schranke des Lösers eine untere Schranke, nicht die beste gefundene Lösung."""
+    if split.status == "optimal":
+        return "Optimum bei teilbarer Zuordnung", split.value
+    if split.status == "limit":
+        return "Teilbare Zuordnung: Schranke des Lösers (nicht bewiesen)", split.bound
+    return None
+
+
 def bound_rows(a):
-    """Schranken und Lösungen: (Name, Wert, Prozent des Single-Source-Optimums, Art); nur mit Optimum."""
+    """Schranken und Lösungen: (Name, Wert, Prozent der Single-Source-Bezugskosten, Art); nur mit einer Single-Source-Lösung. Bezug ist das Optimum, ohne Beweis die beste gefundene Lösung."""
     opt = a["single"].value
     if opt is None:
         return []
     rows = []
     if a["lp"] is not None:
         rows.append(("LP-Relaxation", a["lp"], "untere Schranke"))
-    if a["split"].value is not None:
-        rows.append(("Optimum bei teilbarer Zuordnung", a["split"].value, "untere Schranke"))
+    teil = split_row(a["split"])
+    if teil is not None:
+        rows.append((teil[0], teil[1], "untere Schranke"))
     rows.append(("Lagrange-Schranke", a["run"].best, "untere Schranke"))
-    rows.append(("Optimum (Single-Sourcing)", float(opt), "Optimum"))
+    if a["single"].status == "optimal":
+        rows.append(("Optimum (Single-Sourcing)", float(opt), "Optimum"))
+    else:
+        rows.append(("Beste gefundene Lösung, nicht bewiesen (Single-Sourcing)", float(opt), "Lösung"))
     if a["primal"] is not None:
         rows.append(("Lagrange-Heuristik", float(a["primal"][0]), "Lösung"))
     return [(name, v, 100.0 * v / opt, kind) for name, v, kind in rows]
@@ -85,13 +98,27 @@ def gap_pct(value, opt):
     return 100.0 * (value - opt) / opt
 
 
+def compare_text(cost, cost_proven, opt, opt_proven):
+    """Vergleich der Kosten einer Standortauswahl mit der Bezugslösung des Netzes; None ohne Bezugslösung. „Optimum“ steht nur da, wenn das Netz-Optimum bewiesen ist oder gar nicht behauptet wird."""
+    if opt is None:
+        return None
+    if opt_proven:
+        if cost > opt:
+            return f"{gap_pct(cost, opt):.1f} % über dem Optimum".replace(".", ",")
+        return "Optimum"                                        # Kosten gleich dem bewiesenen Optimum: besser geht es auch ohne Beweis für diese Auswahl nicht
+    if cost == opt:
+        return "wie die beste gefundene Lösung"
+    richtung = "über" if cost > opt else "unter"
+    return f"{abs(gap_pct(cost, opt)):.1f} % {richtung} der besten gefundenen Lösung".replace(".", ",")
+
+
 def try_open(inst, chosen):
-    """Beste teilbare und beste Single-Source-Zuordnung bei fester Standortauswahl: Kosten (None, wenn die Kapazität nicht reicht) und Auslastung je gewähltem Standort."""
+    """Beste teilbare und beste Single-Source-Zuordnung bei fester Standortauswahl: Kosten (None, wenn keine Zuordnung vorliegt), Status je Rechnung und Auslastung je gewähltem Standort."""
     chosen = tuple(sorted(chosen))
-    split, _x = ex.assign_optimum(inst, chosen, single=False, time_limit=C.MIP_LIMIT)
-    single, assign = ex.assign_optimum(inst, chosen, single=True, time_limit=C.MIP_LIMIT)
+    split, _x, split_status = ex.assign_optimum(inst, chosen, single=False, time_limit=C.MIP_LIMIT)
+    single, assign, single_status = ex.assign_optimum(inst, chosen, single=True, time_limit=C.MIP_LIMIT)
     load = {i: sum(inst.demand[j] for j in range(inst.n) if assign and assign[j] == i) for i in chosen}
-    return dict(split=split, single=single, assign=assign, load=load, cap={i: inst.cap[i] for i in chosen},
+    return dict(split=split, single=single, split_status=split_status, single_status=single_status, assign=assign, load=load, cap={i: inst.cap[i] for i in chosen},
                 demand_ok=sum(inst.cap[i] for i in chosen) >= inst.total_demand)
 
 
@@ -101,6 +128,8 @@ def _row(inst, iterations):
         return None
     opt = single.value
     split = ex.solve_mip(inst, False, C.MIP_LIMIT)
+    if split.status != "optimal":
+        return None
     lp, _y = ex.solve_lp(inst)
     row = dict(opt=opt, n_open=len(single.open_set), lp=100 * lp / opt, split=100 * split.value / opt, lp_value=lp)
     for rule in C.RULES:

@@ -88,17 +88,23 @@ def solve_mip(inst, single=True, time_limit=TIME_LIMIT):
 
 
 def assign_optimum(inst, open_set, single=True, time_limit=TIME_LIMIT):
-    """Beste Zuordnung bei fester Standortauswahl: (Kosten inklusive Fixkosten, Zuordnung bzw. Anteile) oder (None, ()), wenn die Kapazität nicht reicht."""
+    """Beste Zuordnung bei fester Standortauswahl: (Kosten inklusive Fixkosten, Zuordnung bzw. Anteile, Status).
+
+    Status wie bei `solve_mip`: "optimal" (bewiesen), "limit" (Zeitlimit: die Kosten gehören zur besten gefundenen Zuordnung; ohne gefundene Zuordnung sind sie None und die Lösbarkeit ist offen),
+    "infeasible" (die Kapazität reicht nicht; Kosten None)."""
     cost, a, lo, hi, lb, ub = _model(inst, set(open_set))
     m, n = inst.m, inst.n
     integrality = np.concatenate([np.ones(m), (np.ones if single else np.zeros)(m * n)])
     res = milp(cost, constraints=LinearConstraint(a, lo, hi), integrality=integrality, bounds=Bounds(lb, ub), options={"time_limit": float(time_limit), "mip_rel_gap": 0.0})
+    if res.status == 2 or (res.x is None and res.status == 0):
+        return None, (), "infeasible"
     if res.x is None:
-        return None, ()
+        return None, (), "limit"
+    status = "optimal" if res.status == 0 else "limit"
     xm = res.x[m:].reshape(m, n)
     if single:
-        return int(round(res.fun)), tuple(int(np.argmax(xm[:, j])) for j in range(n))
-    return float(res.fun), tuple(tuple(float(v) for v in row) for row in xm)
+        return int(round(res.fun)), tuple(int(np.argmax(xm[:, j])) for j in range(n)), status
+    return float(res.fun), tuple(tuple(float(v) for v in row) for row in xm), status
 
 
 def brute_force(inst, single=True):
@@ -109,7 +115,9 @@ def brute_force(inst, single=True):
             if single:
                 v = _best_single(inst, s)
             else:
-                v, _ = assign_optimum(inst, s, single=False)
+                v, _, status = assign_optimum(inst, s, single=False)
+                if status == "limit":
+                    raise RuntimeError("Brute Force: Zuordnung im Zeitlimit nicht bewiesen")
                 v = None if v is None else round(v, 6)
             if v is None:
                 continue

@@ -2,9 +2,10 @@
 
 import pytest
 
+import cfl_evaluation as ev
 import cfl_exact as ex
 import cfl_scenario as sc
-from tests.helpers import tiny
+from tests.helpers import tiny, zeitlimit
 
 
 @pytest.mark.parametrize("seed", range(30))
@@ -76,9 +77,29 @@ def test_single_gap_teaching_net_single_sourcing_costs_more():
 def test_assign_optimum_for_a_fixed_selection():
     inst = sc.teaching("proven")
     assert ex.assign_optimum(inst, (0, 1, 2), True)[0] == 19
-    assert ex.assign_optimum(inst, (0,), True) == (None, ())                 # Kapazität 6 < Nachfrage 13
-    v, x = ex.assign_optimum(inst, (0, 1, 2), False)
-    assert v == pytest.approx(19.0) and len(x) == 3
+    assert ex.assign_optimum(inst, (0,), True) == (None, (), "infeasible")   # Kapazität 6 < Nachfrage 13
+    v, x, status = ex.assign_optimum(inst, (0, 1, 2), False)
+    assert v == pytest.approx(19.0) and len(x) == 3 and status == "optimal"
+
+
+@pytest.mark.parametrize("mit_loesung", [True, False])
+def test_assign_optimum_reports_the_time_limit(monkeypatch, mit_loesung):
+    """Greift das Zeitlimit, heißt die Zuordnung weder bewiesen noch unlösbar."""
+    inst = sc.teaching("proven")
+    zeitlimit(monkeypatch, mit_loesung)
+    value, _x, status = ex.assign_optimum(inst, (0, 1, 2), True)
+    assert status == "limit" and value == (19 if mit_loesung else None)
+    tr = ev.try_open(inst, (0, 1, 2))
+    assert tr["single_status"] == "limit" and tr["split_status"] == "limit"
+
+
+def test_compare_text_calls_a_value_optimum_only_with_a_proven_reference():
+    assert ev.compare_text(19, True, 19, True) == "Optimum" and ev.compare_text(19, False, 19, True) == "Optimum"
+    assert ev.compare_text(22, True, 20, True) == "10,0 % über dem Optimum"
+    assert ev.compare_text(22, True, 20, False) == "10,0 % über der besten gefundenen Lösung"
+    assert ev.compare_text(18, True, 20, False) == "10,0 % unter der besten gefundenen Lösung"
+    assert ev.compare_text(20, True, 20, False) == "wie die beste gefundene Lösung"
+    assert ev.compare_text(20, True, None, False) is None
 
 
 def test_time_limit_branch_reports_limit(monkeypatch):

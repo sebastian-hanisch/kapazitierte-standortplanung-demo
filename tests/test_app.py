@@ -4,10 +4,12 @@ import re
 from pathlib import Path
 
 import pytest
+import streamlit as st
 from streamlit.testing.v1 import AppTest
 
 import cfl_constants as C
 from cfl_presets import PRESET_KEYS
+from tests.helpers import zeitlimit
 
 ROOT = Path(__file__).resolve().parent.parent
 APP = ROOT / "app.py"
@@ -158,3 +160,21 @@ def test_source_has_explicit_chart_keys_and_locked_axes():
     assert all(re.search(r"plotly_chart\(.*key=", line) for line in app.splitlines() if "st.plotly_chart(" in line)
     viz = (ROOT / "cfl_visualization.py").read_text(encoding="utf-8")
     assert viz.count("return _base(fig") >= 6 and "def lock_axes" in viz
+
+
+@pytest.mark.parametrize("mit_loesung", [True, False])
+def test_app_never_claims_an_optimum_or_infeasibility_after_the_time_limit(monkeypatch, mit_loesung):
+    """Ganze App mit einem Löser, der immer das Zeitlimit meldet: „nicht bewiesen“ steht da, „Das Optimum … kostet“ und „keine zulässige Lösung“ nicht."""
+    st.cache_resource.clear()
+    zeitlimit(monkeypatch, mit_loesung)
+    try:
+        at = AppTest.from_file(str(APP), default_timeout=120).run()
+        assert not at.exception, at.exception
+        text = " ".join([m.value for m in at.markdown] + [w.value for w in at.warning] + [i.value for i in at.info])
+        assert "nicht bewiesen" in text
+        assert "Das Optimum mit Single-Sourcing kostet" not in text and "keine zulässige Lösung" not in text and "geht es nicht" not in text
+        assert not [m for m in at.metric if m.label == "Optimum"]
+        tabellen = [str(t.value) for t in at.table]
+        assert not any("Optimum (Single-Sourcing)" in t or "% des Optimums" in t or "Optimum bei teilbarer" in t for t in tabellen)
+    finally:
+        st.cache_resource.clear()

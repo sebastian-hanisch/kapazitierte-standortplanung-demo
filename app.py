@@ -157,6 +157,9 @@ with st.spinner("Rechne..."):
     a = _analysis(params)
 inst, single, split, lp, run, primal = a["inst"], a["single"], a["split"], a["lp"], a["run"], a["primal"]
 opt = single.value
+proven = single.status == "optimal"          # ohne Beweis (Zeitlimit) heißt der Bezugswert nirgends „Optimum“
+ref_line = "Optimum" if proven else "beste gefundene Lösung"
+ref_column = "% des Optimums" if proven else "% der besten gefundenen Lösung"
 
 
 def _view(open_set, key, assign=None, gradient=None, load=None, links=None, height=480):
@@ -166,14 +169,16 @@ def _view(open_set, key, assign=None, gradient=None, load=None, links=None, heig
         st.plotly_chart(build_matrix(inst, open_set, assign), width="stretch", key=key)
 
 
-if opt is None:
+if opt is None and single.status == "limit":
+    st.warning(f"⚠️ Der exakte Löser hat im Zeitlimit **keine Lösung mit Single-Sourcing gefunden**. Ob dieses Netz eine hat, ist damit **nicht bewiesen**; die Schranke des Lösers ist {_int(single.bound)}.")
+elif opt is None:
     st.warning(f"⚠️ Dieses Netz hat **keine zulässige Lösung mit Single-Sourcing**: die Kapazitäten summieren sich auf {_int(inst.total_capacity)} bei einer Gesamtnachfrage von {_int(inst.total_demand)}, "
                "aber kein Kunde darf auf mehrere Standorte verteilt werden, und die Kunden passen nicht in die Standorte. Mit teilbarer Zuordnung wäre das Netz lösbar.")
 else:
+    open_text = (f"**{_pl(len(single.open_set), 'Standort', 'Standorte')}** ({', '.join(inst.site_names[i].replace('Standort ', 'S') for i in single.open_set)})")
     st.markdown(f"Das Netz hat **{inst.m} Kandidaten** und **{inst.n} Kunden** (Gesamtnachfrage {_int(inst.total_demand)}, Kapazität {_int(inst.total_capacity)}). "
-                f"Das Optimum mit Single-Sourcing kostet **{_int(opt)}** und öffnet **{_pl(len(single.open_set), 'Standort', 'Standorte')}** "
-                f"({', '.join(inst.site_names[i].replace('Standort ', 'S') for i in single.open_set)})"
-                + ("." if single.status == "optimal" else f" - **nicht bewiesen** (Zeitlimit): die beste gefundene Lösung, die Schranke des Lösers ist {_int(single.bound)}."))
+                + (f"Das Optimum mit Single-Sourcing kostet **{_int(opt)}** und öffnet {open_text}." if proven else
+                   f"Die beste gefundene Lösung mit Single-Sourcing kostet **{_int(opt)}** und öffnet {open_text}. Dass es keine billigere gibt, ist **nicht bewiesen** (Zeitlimit); die Schranke des Lösers ist {_int(single.bound)}."))
 
 # --- Selbst probieren ---------------------------------------------------------------------------------------------------------------
 
@@ -203,23 +208,31 @@ if chosen:
         _view(chosen, key="pick_view", assign=tr["assign"] or None, load=tr["load"])
     with cr:
         fixed_cost = sum(inst.f[i] for i in chosen)
-        if tr["single"] is None:
+        if tr["single"] is None and tr["single_status"] == "limit":
+            st.warning("Der exakte Löser hat im Zeitlimit für diese Auswahl **keine Zuordnung gefunden**. Ob es mit diesen Standorten geht, ist damit **nicht bewiesen**.")
+        elif tr["single"] is None:
             st.warning("Mit diesen Standorten geht es nicht: " + ("die Kapazität deckt die Nachfrage nicht." if not tr["demand_ok"] else "die Kapazität reicht zwar zusammen, aber die Kunden lassen sich nicht ohne Teilung auf die Standorte verteilen."))
         else:
             m1, m2 = st.columns(2)
-            m1.metric("Kosten mit Single-Sourcing", _int(tr["single"]), delta=(f"{_pct(ev.gap_pct(tr['single'], opt))} über dem Optimum" if opt is not None and tr["single"] > opt else "Optimum") if opt is not None else None,
+            m1.metric("Kosten mit Single-Sourcing", _int(tr["single"]), delta=ev.compare_text(tr["single"], tr["single_status"] == "optimal", opt, proven),
                       delta_color="off" if opt is None or tr["single"] == opt else "inverse")
-            m2.metric("Optimum", _int(opt))
+            m2.metric("Optimum" if proven else "Beste gefundene Lösung (nicht bewiesen)", _int(opt))
             m3, m4 = st.columns(2)
             m3.metric("Fixkosten", _int(fixed_cost), help="Summe der Fixkosten der offenen Standorte.")
-            m4.metric("Kosten mit teilbarer Zuordnung", _val(tr["split"]), help="Wenn ein Kunde auf mehrere Standorte aufgeteilt werden dürfte: die billigere Untergrenze für diese Auswahl.")
+            if tr["split_status"] == "optimal":
+                m4.metric("Kosten mit teilbarer Zuordnung", _val(tr["split"]), help="Wenn ein Kunde auf mehrere Standorte aufgeteilt werden dürfte: die billigere Untergrenze für diese Auswahl.")
+            else:
+                m4.metric("Teilbare Zuordnung (nicht bewiesen)", _val(tr["split"]), help="Der Löser hat das Zeitlimit erreicht: die beste gefundene Lösung mit teilbarer Zuordnung, keine Untergrenze.")
+            if tr["single_status"] != "optimal" and not (proven and tr["single"] == opt):
+                st.warning("**Nicht bewiesen** (Zeitlimit): für diese Auswahl ist das die beste gefundene Zuordnung, es kann eine billigere geben.")
             st.caption("Auslastung: " + ", ".join(f"{inst.site_names[i].replace('Standort ', 'S')} {tr['load'][i]} von {inst.cap[i]}" for i in chosen))
 else:
     with cl:
         _view((), key="pick_view")
     with cr:
         st.info("Wählen Sie mindestens einen Standort: ohne offenen Standort kann niemand beliefert werden.")
-st.caption("Grün: offener Standort (Größe = Kapazität); die Linien führen von jedem Kunden (blau, Größe = Nachfrage) zu seinem Standort. Die Zuordnung ist die beste mit Single-Sourcing für diese Auswahl. Bei Lehrnetzen zeigt die Matrix die Kosten (dunkel = billig), zugeordnete Zellen sind grün umrandet.")
+best_kind = "beste gefundene (nicht bewiesen)" if chosen and tr["single_status"] == "limit" else "beste"
+st.caption(f"Grün: offener Standort (Größe = Kapazität); die Linien führen von jedem Kunden (blau, Größe = Nachfrage) zu seinem Standort. Die Zuordnung ist die {best_kind} mit Single-Sourcing für diese Auswahl. Bei Lehrnetzen zeigt die Matrix die Kosten (dunkel = billig), zugeordnete Zellen sind grün umrandet.")
 
 st.markdown("---")
 
@@ -254,7 +267,7 @@ def _render(k):
             else:
                 st.plotly_chart(build_matrix(inst, sub.open_set, [next((i for i in sub.open_set if j in sub.served[i]), None) for j in range(inst.n)]), width="stretch", key=f"lag_map_{k}")
         with c2:
-            st.plotly_chart(build_convergence(run, opt, lp, current=k, height=380), width="stretch", key=f"conv_{k}")
+            st.plotly_chart(build_convergence(run, opt, lp, current=k, height=380, opt_label=ref_line), width="stretch", key=f"conv_{k}")
         unserved = sum(1 for g in it.gradient if g > 0)
         multi = sum(1 for g in it.gradient if g < 0)
         m1, m2 = st.columns(2)
@@ -289,22 +302,24 @@ st.markdown("---")
 st.markdown("## 🎯 Die Schranke: wie viel der Lücke schließt Lagrange?")
 rows = ev.bound_rows(a)
 if rows:
-    st.plotly_chart(build_bounds(rows), width="stretch", key="bounds_chart")
-    st.table({"Wert": [r[0] for r in rows], "Kosten / Schranke": [_val(r[1]) for r in rows], "% des Optimums": [_f(r[2], 2) for r in rows]})
+    st.plotly_chart(build_bounds(rows, proven=proven), width="stretch", key="bounds_chart")
+    st.table({"Wert": [r[0] for r in rows], "Kosten / Schranke": [_val(r[1]) for r in rows], ref_column: [_f(r[2], 2) for r in rows]})
     lp_v, lg_v = a["lp"], run.best
     if lp_v is not None and opt > lp_v + 1e-6:
         closed = (lg_v - lp_v) / (opt - lp_v) if lg_v > lp_v else 0.0
-        st.info(f"Die LP lässt eine Lücke von {_int(opt - lp_v)} zum Optimum; die Lagrange-Schranke schließt davon {_pct(100 * max(0.0, min(1.0, closed)), 0)}.")
+        gap_to = "zum Optimum" if proven else "zur besten gefundenen Lösung (nicht bewiesen)"
+        st.info(f"Die LP lässt eine Lücke von {_int(opt - lp_v)} {gap_to}; die Lagrange-Schranke schließt davon {_pct(100 * max(0.0, min(1.0, closed)), 0)}.")
 else:
-    st.table({"Wert": ["LP-Relaxation", "Optimum bei teilbarer Zuordnung", "Beste Lagrange-Schranke"], "Kosten / Schranke": [_val(lp), _val(split.value), _val(round(run.best, 2))]})
+    teil = ev.split_row(split) or ("Optimum bei teilbarer Zuordnung", None)
+    st.table({"Wert": ["LP-Relaxation", teil[0], "Beste Lagrange-Schranke"], "Kosten / Schranke": [_val(lp), _val(teil[1]), _val(round(run.best, 2))]})
 st.caption(
     "Die **LP** relaxiert alles auf einmal. Die **Lagrange-Schranke** behält im Teilproblem den ganzzahligen Rucksack: ein Rucksack hat **keine Integralitätseigenschaft** (seine LP-Lösung ist meist gebrochen), deshalb kann der beste Wert über der LP liegen (Geoffrion 1974). "
     "Relaxierte man stattdessen die Kapazität, bliebe ein Standortproblem ohne Kapazität, das die Integralitätseigenschaft hat: sein bester Wert wäre genau der LP-Wert, nie mehr (im Test an Kleinstnetzen nachgerechnet)."
 )
 with st.expander("Schrittweitenregeln im Vergleich"):
-    st.plotly_chart(build_rules(a["runs"], opt), width="stretch", key="rules_chart")
+    st.plotly_chart(build_rules(a["runs"], opt, opt_label=ref_line), width="stretch", key="rules_chart")
     st.table({"Regel": [C.LABELS[r] for r in a["runs"]], "beste Schranke": [_val(round(a["runs"][r][0].best, 2)) for r in a["runs"]],
-              "% des Optimums": [_f(100 * a["runs"][r][0].best / opt, 2) if opt else "–" for r in a["runs"]], "Iterationen": [str(len(a["runs"][r][0].iters)) for r in a["runs"]],
+              ref_column: [_f(100 * a["runs"][r][0].best / opt, 2) if opt else "–" for r in a["runs"]], "Iterationen": [str(len(a["runs"][r][0].iters)) for r in a["runs"]],
               "hält wegen": [a["runs"][r][0].stopped for r in a["runs"]]})
     st.caption("Alle drei Regeln starten bei denselben Preisen und dem gleichen Anfangsschritt. Die Polyak-Regel nutzt die obere Schranke als Ziel; die konstante Schrittweite springt um die Lösung herum und kommt nicht an.")
 
@@ -337,7 +352,7 @@ if st.session_state.get("dist_on"):
     st.plotly_chart(build_dist(dist), width="stretch", key="dist_chart")
     st.table({"Schranke": ["LP-Relaxation", "teilbares Optimum", "Lagrange (Polyak)", "Lagrange (schrumpfend)", "Lagrange (konstant)"],
               "Mittel [% des Optimums]": [_f(s[k], 2) for k in ("lp", "split", "polyak", "shrinking", "constant")]})
-    st.caption(f"In {s['solved']} von {s['count']} Netzen hat der exakte Löser das Optimum bewiesen. Die Lagrange-Schranke (Polyak) liegt in {s['better_than_lp']} Netzen über der LP, im Mittel bei {_pct(s['polyak'], 2)} gegen {_pct(s['lp'], 2)}; "
+    st.caption(f"In {s['solved']} von {s['count']} Netzen hat der exakte Löser beide Optima (Single-Sourcing und teilbar) bewiesen; nur diese Netze zählen.Die Lagrange-Schranke (Polyak) liegt in {s['better_than_lp']} Netzen über der LP, im Mittel bei {_pct(s['polyak'], 2)} gegen {_pct(s['lp'], 2)}; "
                f"die Heuristik liegt im Mittel {_pct(s['ub_mean'], 2)} über dem Optimum (Median {_pct(s['ub_median'], 2)}, schlechtestes Netz {_pct(s['ub_max'], 2)}, exakt in {s['ub_exact']} Netzen); bewiesen optimal in {s['proven']} Netzen.")
 
 st.markdown("---")
